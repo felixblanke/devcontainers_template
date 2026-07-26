@@ -1,0 +1,12 @@
+{
+  "name": "agents",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "node",
+  "runArgs": ["--cap-add=NET_ADMIN"],
+  "mounts": [
+    "source=agents-claude,target=/home/node/.claude,type=volume",
+    "source=agents-codex,target=/home/node/.codex,type=volume"
+  ],
+  "postCreateCommand": "sudo chown -R node:node /home/node/.claude /home/node/.codex",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh"
+}
