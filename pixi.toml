@@ -8,7 +8,14 @@
 [workspace]
 name = "ml-project"
 channels = ["conda-forge"]
-platforms = ["linux-64", "linux-aarch64"]
+# The gpu feature is bound to the named CUDA variant below. Declaring __cuda
+# here lets the solver resolve pytorch-gpu on a machine with no GPU, so the
+# lockfile can be produced and committed from your laptop.
+platforms = [
+  "linux-64",
+  "linux-aarch64",
+  { name = "linux-64-cuda", platform = "linux-64", cuda = "12.6" },
+]
 
 [dependencies]
 # Pin the minor, not a floor. `python>=3.14` would silently accept 3.15 the day
@@ -66,6 +73,11 @@ lint = "ruff check ."
 fmt = "ruff format ."
 types = "mypy src"
 check = { depends-on = ["fmt", "lint", "types", "test"] }
+
+# conda-forge ships the CUDA runtime, so no CUDA base image is needed --
+# only a recent NVIDIA driver on the host.  pixi run -e gpu test
+[feature.gpu]
+platforms = ["linux-64-cuda"]
 
 # conda-forge ships the CUDA runtime, so no CUDA base image is needed --
 # only a recent NVIDIA driver on the host.  pixi run -e gpu test

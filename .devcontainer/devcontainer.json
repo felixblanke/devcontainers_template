@@ -42,8 +42,6 @@
     "CODEX_INCLUDE_GITHUB_META_RANGES": "1",
     "OPENAI_ALLOWED_DOMAINS": "api.anthropic.com claude.ai claude.com platform.claude.com downloads.claude.ai api.openai.com auth.openai.com chatgpt.com registry.npmjs.org conda.anaconda.org pypi.org files.pythonhosted.org huggingface.co cdn-lfs.huggingface.co",
 
-    // So bare `python`/`pytest` work in the non-interactive shells agents spawn.
-    "PATH": "${containerWorkspaceFolder}/.pixi/envs/default/bin:${containerEnv:PATH}",
     // Shell history in a volume too, and flushed after every command rather
     // than only on clean exit, since containers often just get killed.
     "HISTFILE": "/commandhistory/.bash_history",
@@ -58,6 +56,11 @@
     "GIT_ASKPASS": "",
     "GH_TOKEN": "",
     "GITHUB_TOKEN": ""
+  },
+
+  // PATH MUST live in remoteEnv, never containerEnv.
+  "remoteEnv": {
+    "PATH": "${containerWorkspaceFolder}/.pixi/envs/default/bin:${containerEnv:PATH}"
   },
 
   // Runs before the firewall, so the first big download is unrestricted.
