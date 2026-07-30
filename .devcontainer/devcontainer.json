@@ -1,10 +1,11 @@
 {
   "name": "ml-agents",
   "build": { "dockerfile": "Dockerfile", "args": { "NODE_VARIANT": "22-bookworm" } },
-  "features": {
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
-  },
-  "remoteUser": "node",
+  // root, deliberately: under ROOTLESS Docker, container uid 0 maps to your host
+  // user, so root is the only user whose writes to the bind-mounted workspace
+  // land as you. Running as `node` maps to a subuid (~100999) and produces
+  // git's "dubious ownership" on the host. This is not host privilege.
+  "remoteUser": "root",
 
   "runArgs": [
     "--cap-add=NET_ADMIN",
@@ -19,9 +20,9 @@
   "hostRequirements": { "gpu": "optional" },
 
   "mounts": [
-    "source=agents-claude,target=/home/node/.claude,type=volume",
-    "source=agents-codex,target=/home/node/.codex,type=volume",
-    "source=ml-caches,target=/home/node/.cache,type=volume",
+    "source=agents-claude,target=/root/.claude,type=volume",
+    "source=agents-codex,target=/root/.codex,type=volume",
+    "source=ml-caches,target=/root/.cache,type=volume",
     "source=agents-history,target=/commandhistory,type=volume",
     // pixi's docs: .pixi must not sit on a case-insensitive filesystem, and a
     // volume also keeps a large env off a slow bind mount.
@@ -34,21 +35,21 @@
   "containerEnv": {
     // Required. Claude Code keeps the OAuth account in ~/.claude.json, which is
     // OUTSIDE the ~/.claude volume above; without this you re-auth every rebuild.
-    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
-    "CODEX_HOME": "/home/node/.codex",
+    "CLAUDE_CONFIG_DIR": "/root/.claude",
+    "CODEX_HOME": "/root/.codex",
 
     // Firewall. "0" disables it for a session. The domain list is data: edit it.
     "CODEX_ENABLE_FIREWALL": "1",
     "CODEX_INCLUDE_GITHUB_META_RANGES": "1",
-    "OPENAI_ALLOWED_DOMAINS": "api.anthropic.com claude.ai claude.com platform.claude.com downloads.claude.ai api.openai.com auth.openai.com chatgpt.com registry.npmjs.org conda.anaconda.org pypi.org files.pythonhosted.org huggingface.co cdn-lfs.huggingface.co",
+    "OPENAI_ALLOWED_DOMAINS": "api.anthropic.com claude.ai claude.com platform.claude.com downloads.claude.ai sentry.io api.openai.com auth.openai.com chatgpt.com registry.npmjs.org conda.anaconda.org pypi.org files.pythonhosted.org huggingface.co",
 
     // Shell history in a volume too, and flushed after every command rather
     // than only on clean exit, since containers often just get killed.
     "HISTFILE": "/commandhistory/.bash_history",
     "PROMPT_COMMAND": "history -a",
 
-    "HF_HOME": "/home/node/.cache/huggingface",
-    "TORCH_HOME": "/home/node/.cache/torch",
+    "HF_HOME": "/root/.cache/huggingface",
+    "TORCH_HOME": "/root/.cache/torch",
 
     // VS Code forwards your SSH agent and git credentials in by default, which
     // hands the agent your push access. Delete these lines to opt back in.
@@ -59,12 +60,20 @@
   },
 
   // PATH MUST live in remoteEnv, never containerEnv.
+  //
+  // ${containerEnv:PATH} can only be resolved once the container exists, but
+  // containerEnv is passed to `docker create` -- so in containerEnv it stays
+  // literal/empty, PATH loses /bin, the keep-alive `while sleep 1000` fails with
+  // "sleep: not found", and the container exits 0 immediately after starting.
+  // remoteEnv is substituted after creation and applies to terminals,
+  // `devcontainer exec`, and lifecycle commands -- which is everything the
+  // agents run, including the non-interactive shells they spawn as children.
   "remoteEnv": {
     "PATH": "${containerWorkspaceFolder}/.pixi/envs/default/bin:${containerEnv:PATH}"
   },
 
   // Runs before the firewall, so the first big download is unrestricted.
-  "postCreateCommand": "sudo chown node:node .pixi && pixi install",
+  "postCreateCommand": "chown root:root .pixi && pixi install",
   "postStartCommand": "bash /usr/local/bin/post-start.sh",
   // Don't hand over the workspace before the firewall is up.
   "waitFor": "postStartCommand",
@@ -72,6 +81,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "anthropic.claude-code",
         "ms-python.python", "ms-python.vscode-pylance", "charliermarsh.ruff",
         "ms-toolsai.jupyter", "tamasfe.even-better-toml", "openai.chatgpt"
       ],

@@ -13,8 +13,15 @@ RUN curl -fsSL --compressed -o /usr/local/bin/pixi \
       "https://github.com/prefix-dev/pixi/releases/download/${PIXI_VERSION}/pixi-$(uname -m)-unknown-linux-musl" \
     && chmod 0755 /usr/local/bin/pixi && pixi info
 
+# Both CLIs via npm. The official claude-code Dev Container Feature is NOT used:
+# an older published artifact of it ships Anthropic's own init-firewall.sh to
+# /usr/local/bin, and because Features layer AFTER this Dockerfile it silently
+# overwrites the checksum-verified script fetched below. Pin versions here if you
+# want reproducible builds.
 ARG CODEX_VERSION=latest
-RUN npm install -g @openai/codex@${CODEX_VERSION} && npm cache clean --force
+ARG CLAUDE_VERSION=latest
+RUN npm install -g @openai/codex@${CODEX_VERSION} @anthropic-ai/claude-code@${CLAUDE_VERSION} \
+    && npm cache clean --force
 
 # Egress firewall from openai/codex, pinned and checksum-verified rather than
 # vendored. To update: bump CODEX_REF, rebuild, and the sha256sum failure prints
@@ -31,13 +38,25 @@ RUN set -eux; \
     chmod 0500 /usr/local/bin/init-firewall.sh; \
     chmod 0555 /usr/local/bin/post-start.sh
 
+# Upstream bug: `dig +short A` prints the CNAME chain as well as the A records,
+# and the script feeds every line to an IPv4 regex, exiting on the first
+# mismatch -- so it aborts on any CNAME-fronted host (auth.openai.com,
+# files.pythonhosted.org, and most CDN-backed hosts). Filter to A records only.
+# Single-quoted throughout so the build shell expands nothing; sed's c\ replaces
+# the whole line. Applied AFTER the checksum check, so if upstream edits this
+# line sha256sum fails first and you revisit the patch. The grep -q fails the
+# build if the substitution ever stops matching.
+RUN sed -i '/ips="$(dig/c\  ips="$(dig +short A "$domain" | grep -E "^[0-9]+([.][0-9]+){3}$")"' \
+      /usr/local/bin/init-firewall.sh \
+ && grep -q 'grep -E' /usr/local/bin/init-firewall.sh
+
 # Create the volume mount points, owned by node, BEFORE any volume is attached.
 # A named volume mounted over a path that does not exist in the image is created
 # root-owned, and Claude Code / Codex then silently fail to write their state.
 # When the path does exist, Docker copies its contents AND ownership into the
 # fresh volume, which is what makes the state survive a reset.
-RUN install -d -o node -g node \
-      /home/node/.claude /home/node/.codex /home/node/.cache /commandhistory \
-    && install -o node -g node /dev/null /commandhistory/.bash_history
+RUN install -d -o root -g root \
+      /root/.claude /root/.codex /root/.cache /commandhistory \
+    && install -o root -g root /dev/null /commandhistory/.bash_history
 
-USER node
+USER root
