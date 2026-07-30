@@ -1,8 +1,9 @@
 # Dependencies, lockfile and tasks in one file. Commit pixi.lock.
-#   pixi add scikit-image        add a conda-forge package
-#   pixi add --pypi some-pkg     only if it isn't on conda-forge
-#   pixi run test                run a task inside the environment
-#   pixi shell                   interactive activated shell
+#   pixi add scikit-image            add a conda-forge package
+#   pixi add --pypi some-pkg         only if it isn't on conda-forge
+#   pixi add --feature gpu foo       add to the gpu environment only
+#   pixi run test                    run a task inside the environment
+#   pixi shell                       interactive activated shell
 
 [workspace]
 name = "ml-project"
@@ -10,26 +11,61 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
 
 [dependencies]
+# Pin the minor, not a floor. `python>=3.14` would silently accept 3.15 the day
+# it lands (currently at b4, GA expected Oct 2026) and change your environment
+# under you. pixi.lock pins exactly; the manifest states intent.
 python = "3.14.*"
-numpy = ">=2.0"
-fire = "*"
-tqdm = "*"
+
+# Same reasoning. PyTorch minors change defaults, kernels and numerics; you do
+# not want that arriving unannounced mid-project.
+pytorch = "2.13.*"
+
+# --- core numerics ---
+numpy = ">=2.0,<3"
 scipy = "*"
 pandas = "*"
+pyarrow = "*"                # parquet; also the pandas/polars interchange format
+
+# --- ML ---
+scikit-learn = "*"
+einops = "*"                 # named tensor ops; makes reshapes self-documenting
+
+# --- shape correctness: catches the single most common silent ML bug ---
+jaxtyping = "*"              # Float[Tensor, "batch seq dim"] annotations
+beartype = "*"               # makes those annotations actually checked at runtime
+
+# --- configuration: keeps seeds and hyperparameters out of the source ---
+hydra-core = "*"
+
+# --- experiment tracking ---
+wandb = "*"                  # swap for mlflow or aim if you'd rather self-host
+
+# --- plotting ---
 matplotlib = "*"
 seaborn = "*"
-scikit-learn = "*"
-pytorch = "2.13.*"          # CPU build; see the gpu environment below
+
+# --- notebooks ---
 ipykernel = "*"
+jupyterlab = "*"
+nbstripout = "*"
+jupytext = "*"               # pair notebooks with .py; reviewable diffs
+
+# --- dev tooling ---
 pytest = "*"
+pytest-xdist = "*"           # pytest -n auto
 ruff = "*"
-einops = "*"
+mypy = "*"
+pre-commit = "*"
+ipdb = "*"
+py-spy = "*"                 # sample a running process; finds dataloader stalls
+rich = "*"                   # readable tracebacks and tables in logs
 
 [tasks]
-test = "pytest -q"
+test = "pytest -q -n auto"
 lint = "ruff check ."
 fmt = "ruff format ."
-check = { depends-on = ["fmt", "lint", "test"] }
+types = "mypy src"
+check = { depends-on = ["fmt", "lint", "types", "test"] }
 
 # conda-forge ships the CUDA runtime, so no CUDA base image is needed --
 # only a recent NVIDIA driver on the host.  pixi run -e gpu test
