@@ -9,9 +9,22 @@ firewall. Copy into a project, edit three things, open.
   extension, or `npm i -g @devcontainers/cli`.
 - For GPU: NVIDIA Container Toolkit on the host. Verify *before* building, since
   `hostRequirements.gpu: "optional"` silently skips a missing GPU:
-  `docker run --rm --gpus all ubuntu nvidia-smi`
+  `docker run --rm --gpus all ubuntu nvidia-smi` *(host)*
 
 ## Adopt it
+
+## Adopt it
+
+> **Where commands run.** Everything below runs **inside the container** unless
+> marked *(host)*. In VS Code you get that for free — the integrated terminal is
+> already in the container. From the CLI, open one shell and stay there:
+>
+> ```bash
+> devcontainer exec --workspace-folder . bash      # (host) -> container shell
+> ```
+>
+> `devcontainer exec` applies `remoteEnv`, so `PATH` includes the pixi
+> environment and bare `python` / `pixi` / `claude` work.
 
 1. Copy these into your project root:
 
@@ -26,14 +39,16 @@ firewall. Copy into a project, edit three things, open.
      hosts you actually need
    - `.gitignore` → merge with yours if you have one
 
-3. **Dev Containers: Reopen in Container** (or `devcontainer up --workspace-folder .`).
+3. **Dev Containers: Reopen in Container**, or *(host)*
+   `devcontainer up --workspace-folder .`
    First open solves and downloads the environment; later opens reuse the volume.
 
 4. Verify, **inside the container** — it refuses to run on the host:
 
-   ```bash
-   devcontainer exec --workspace-folder . bash verify.sh
-   ```
+    ```bash
+    bash verify.sh                                            # in the container
+    devcontainer exec --workspace-folder . bash verify.sh     # or from the host
+    ```
 
    Expect all PASS, GPU SKIP on a laptop. Fix the first failure and re-run.
 
@@ -58,6 +73,11 @@ firewall. Copy into a project, edit three things, open.
 | `claude` / `codex` | agents; both read `AGENTS.md` |
 | `bash /usr/local/bin/post-start.sh` | re-resolve DNS after a CDN rotation |
 
+All of the above run in the container. From the host, prefix with
+`devcontainer exec --workspace-folder .` — but note that `pixi shell` and
+`claude` are interactive, so they need a real TTY; open a container shell first
+rather than wrapping each invocation.
+
 Bare `python` and `pytest` work everywhere, including the non-interactive shells
 agents spawn. Prefer `pixi run` for real work — it applies activation scripts
 that conda-forge CUDA builds need.
@@ -74,8 +94,8 @@ Each of these cost a debugging session; they're all already handled, so don't
   host uid is 1000.
 - Rebuilding: `--remove-existing-container` recreates the container;
   `--build-no-cache` rebuilds the image. Named volumes survive both — use
-  `docker volume rm agents-claude agents-codex agents-history ml-caches` to
-  really reset state (costs a re-login). Feature/CLI caches live in
+  *(host)* `docker volume rm agents-claude agents-codex agents-history ml-caches`
+  to really reset state (costs a re-login). Feature/CLI caches live in
   `~/.devcontainer` and `~/.cache/devcontainercli`.
 
 ## What persists across a rebuild
